@@ -117,9 +117,9 @@ export default function MainLandingPage() {
         {/* Badges */}
         <div className="flex items-center justify-center gap-3 mb-8">
           {[
-            { Icon: Zap, text: "Vercel SDK" },
-            { Icon: ShieldCheck, text: "Gemini 2.0" },
-            { Icon: Activity, text: "Live Metrics" }
+            { Icon: Zap, text: "Pedagogical AI" },
+            { Icon: ShieldCheck, text: "Cognitive Science" },
+            { Icon: Activity, text: "Curriculum Mastery" }
           ].map((item, i) => (
             <motion.div
               key={i}
