@@ -1,26 +1,128 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-background: #020617;
+  --color-surface: #020617;
+  --color-on-surface: #f1f5f9;
+  --color-on-surface-variant: #94a3b8;
+  
+  --color-primary: #6366f1;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #1e1b4b;
+  --color-on-primary-container: #e0e7ff;
+  
+  --color-secondary: #818cf8;
+  --color-on-secondary: #e2fff9;
+  
+  --color-error: #ef4444;
+  --color-outline: #1e293b;
+  --color-outline-variant: #334155;
+  --color-surface-variant: #1e293b;
+
+  --radius-DEFAULT: 1rem;
+  --radius-lg: 1.5rem;
+  --radius-xl: 2.5rem;
+
+  --font-plus-jakarta: "Plus Jakarta Sans", sans-serif;
+  --font-inter: "Inter", sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+.glass-card {
+  @apply bg-white/[0.03] backdrop-blur-xl border border-white/[0.08] shadow-2xl;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+.glass-button {
+  @apply bg-white/[0.05] backdrop-blur-md border border-white/10 hover:bg-white/[0.1] transition-all active:scale-95;
+}
+
+@layer base {
+  html {
+    font-size: 14px; /* Globally shrink all rem-based sizes by ~12.5% */
   }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-on-surface);
+    font-family: var(--font-inter);
+    -webkit-font-smoothing: antialiased;
+    animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  
+  h1, h2, h3, .font-headline {
+    font-family: var(--font-plus-jakarta);
+  }
+
+  @keyframes fade-in-up {
+    0% { opacity: 0; transform: translateY(20px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Custom scrollbar for clean UI */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--color-surface-variant); border-radius: 10px; }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@keyframes slide-in {
+  0% { opacity: 0; transform: translateX(100px) scale(0.95); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+  .animate-slide-in {
+    animation: slide-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* Force hide native video controls overlays */
+  video::-webkit-media-controls {
+    display: none !important;
+  }
+  video::-webkit-media-controls-enclosure {
+    display: none !important;
+  }
+  video::-webkit-media-controls-panel {
+    display: none !important;
+  }
+  video::-webkit-media-controls-play-button,
+  video::-webkit-media-controls-start-playback-button {
+    display: none !important;
+    -webkit-appearance: none;
+  }
+
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+
+@keyframes fade-in {
+  0% { opacity: 0; transform: translateX(-8px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.25s ease-out forwards;
+}
+
+/* PDF Export Overrides */
+.export-pdf-mode {
+  background: white !important;
+  color: black !important;
+  padding: 40px !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  width: 800px !important;
+  min-height: 1000px !important;
+}
+
+.export-pdf-mode h2 {
+  color: #1e1b4b !important; /* Dark indigo */
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 8px;
+  margin-top: 24px;
+}
+
+.export-pdf-mode strong {
+  color: #4338ca !important;
+}
+
+.export-pdf-mode li {
+  margin-bottom: 8px;
 }
