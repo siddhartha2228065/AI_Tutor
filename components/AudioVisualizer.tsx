@@ -23,13 +23,20 @@ export default function AudioVisualizer({ stream, isActive, color = "#6366f1" }:
     if (!audioCtxRef.current) {
       audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
+    
+    // Resume context if suspended (browser security requirement)
+    if (audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume();
+    }
 
     const audioCtx = audioCtxRef.current;
     
-    // Resume context if suspended (browser security requirement)
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume();
-    }
+    // Additional safeguard for mobile browsers
+    const resumeContext = () => {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    };
+    window.addEventListener('click', resumeContext, { once: true });
+    window.addEventListener('touchstart', resumeContext, { once: true });
 
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 256;
@@ -76,6 +83,8 @@ export default function AudioVisualizer({ stream, isActive, color = "#6366f1" }:
 
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      window.removeEventListener('click', resumeContext);
+      window.removeEventListener('touchstart', resumeContext);
       // We don't close the audio context here to avoid needing to recreate it
     };
   }, [stream, isActive, color]);

@@ -1,4 +1,4 @@
-import { ScreenerMetrics } from "@/hooks/useScreenerLogic";
+import { ScreenerMetrics, VideoMetrics } from "@/hooks/useScreenerLogic";
 
 interface Props {
   metrics: ScreenerMetrics;
@@ -7,6 +7,8 @@ interface Props {
   interviewEnded: boolean;
   formatTime: (s: number) => string;
   endInterview: () => void;
+  videoMetrics?: VideoMetrics;
+  isVideoEnabled?: boolean;
 }
 
 export default function LiveMetricsPanel({
@@ -16,6 +18,8 @@ export default function LiveMetricsPanel({
   interviewEnded,
   formatTime,
   endInterview,
+  videoMetrics,
+  isVideoEnabled,
 }: Props) {
   return (
     <div className="w-80 border-l border-white/5 bg-slate-900/50 backdrop-blur-xl flex flex-col flex-shrink-0 hidden lg:flex shadow-2xl">
@@ -47,6 +51,40 @@ export default function LiveMetricsPanel({
             </div>
           );
         })}
+        {isVideoEnabled && videoMetrics && (
+          <div className="border-t border-white/5 pt-6">
+            <div className="flex items-center gap-2 mb-5">
+              <span className="material-symbols-outlined text-emerald-400 text-[16px]" style={{ fontVariationSettings: "'FILL' 1" }}>visibility</span>
+              <span className="text-emerald-300 text-[10px] font-bold font-mono tracking-widest uppercase">Vision Analysis</span>
+              <div className="ml-auto w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            </div>
+            {[
+              { key: "eyeContact", label: "Eye Contact", color: "from-emerald-400 to-teal-400", icon: "visibility" },
+              { key: "gestures", label: "Hand Gestures", color: "from-violet-400 to-purple-400", icon: "gesture" },
+              { key: "smileFrequency", label: "Smile / Warmth", color: "from-amber-400 to-yellow-400", icon: "sentiment_satisfied" },
+              { key: "posture", label: "Posture", color: "from-sky-400 to-blue-400", icon: "accessibility_new" },
+            ].map((m) => {
+              const value = videoMetrics[m.key as keyof VideoMetrics];
+              return (
+                <div key={m.key} className="mb-4">
+                  <div className="flex justify-between text-xs mb-1.5">
+                    <span className="text-slate-500 text-[10px] font-mono uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[12px]">{m.icon}</span>
+                      {m.label}
+                    </span>
+                    <span className="text-white font-bold text-[10px]">{value}%</span>
+                  </div>
+                  <div className="w-full h-1 bg-slate-950 rounded-full overflow-hidden border border-white/5">
+                    <div
+                      className={`h-full bg-gradient-to-r ${m.color} rounded-full transition-all duration-1000`}
+                      style={{ width: `${value}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         <div className="mt-auto border-t border-white/5 pt-6">
           <div className="bg-slate-950/50 border border-white/5 rounded-2xl p-5">

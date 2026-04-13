@@ -1,17 +1,24 @@
 "use client";
 
 import { useToast } from "@/components/Toast";
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
+import * as htmlToImage from "html-to-image";
 import { useScreenerLogic } from "@/hooks/useScreenerLogic";
 import AntiGravitySphere from "@/components/AntiGravitySphere";
 import AudioVisualizer from "@/components/AudioVisualizer";
 
 import PreStartScreen from "@/components/tutor/PreStartScreen";
 import LiveMetricsPanel from "@/components/tutor/LiveMetricsPanel";
+import Whiteboard from "@/components/tutor/Whiteboard";
+import { useState, useEffect } from "react";
+import { useTelemetryStore } from "@/hooks/useTelemetryStore";
+import { useRouter } from "next/navigation";
+import { useSound } from "@/hooks/useSound";
 
 export default function TutorScreenerPage() {
   const { showToast } = useToast();
+  const telemetry = useTelemetryStore();
+  const router = useRouter();
   const { state, refs, actions } = useScreenerLogic(showToast);
 
   const formatTime = (s: number) => {
@@ -26,16 +33,20 @@ export default function TutorScreenerPage() {
     const element = refs.reportRef.current;
     element.classList.add("export-pdf-mode");
     try {
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF("p", "mm", "a4");
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Cuemath_Interview_Report_${Date.now()}.pdf`);
-      showToast("Report downloaded successfully!", "success");
-    } catch (e) {
-      showToast("Failed to generate PDF.", "error");
+      const dataUrl = await htmlToImage.toPng(element, { quality: 1, backgroundColor: "#ffffff", style: { transform: "scale(1)", transformOrigin: "top left" } });
+      const img = new Image();
+      img.src = dataUrl;
+      img.onload = () => {
+        const pdf = new jsPDF("p", "mm", "a4");
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (img.height * pdfWidth) / img.width;
+        pdf.addImage(dataUrl, "PNG", 0, 0, pdfWidth, pdfHeight);
+        pdf.save(`Cuemath_Interview_Report_${Date.now()}.pdf`);
+        showToast("Report downloaded successfully!", "success");
+      };
+    } catch (e: any) {
+      console.error(e);
+      showToast("Failed to generate PDF: " + (e.message || "Unknown error"), "error");
     } finally {
       element.classList.remove("export-pdf-mode");
     }
@@ -48,8 +59,83 @@ export default function TutorScreenerPage() {
   const candidateMessages = state.dialogue.filter((m) => !m.isAi).length;
   const agentActive = state.isAiTalking || state.isThinking;
 
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [comparingIds, setComparingIds] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [candidateName, setCandidateName] = useState("");
+  const [isWhiteboardOpen, setIsWhiteboardOpen] = useState(false);
+  const { playHover, playClick } = useSound();
+
+  // Bind video stream to the video element when it changes
+  useEffect(() => {
+    if (refs.videoRef.current && state.videoStream) {
+      refs.videoRef.current.srcObject = state.videoStream;
+    }
+  }, [state.videoStream, refs.videoRef]);
+
+  const handleSave = () => {
+    const reportMsg = state.dialogue.find(m => m.isReport);
+    if (!reportMsg) return;
+
+    telemetry.saveCandidate({
+      name: candidateName || "Anonymous Candidate",
+      date: new Date().toLocaleDateString(),
+      metrics: state.metrics,
+      summary: reportMsg.text
+    });
+    showToast("Candidate saved successfully!", "success");
+    setIsSaving(false);
+    setCandidateName("");
+  };
+
+  const toggleCompare = (id: string) => {
+    setComparingIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : prev.length < 3 ? [...prev, id] : prev
+    );
+  };
+
+  const [isGeneratingRoadmap, setIsGeneratingRoadmap] = useState<string | null>(null);
+
+  const handleGenerateRoadmap = async (c: any) => {
+    setIsGeneratingRoadmap(c.id);
+    try {
+      await telemetry.generateRoadmap(c);
+      showToast("Pedagogical roadmap generated!", "success");
+      router.push("/roadmap");
+    } catch (e) {
+      showToast("Roadmap generation failed.", "error");
+    } finally {
+      setIsGeneratingRoadmap(null);
+    }
+  };
+
+  if (!telemetry.isHydrated) return null;
+
   if (!state.interviewStarted) {
-    return <PreStartScreen startInterview={actions.startInterview} />;
+    return (
+      <div className="relative h-full">
+        <PreStartScreen startInterview={actions.startInterview} />
+        {/* Quick History Access */}
+        <button 
+          onClick={() => setIsHistoryOpen(true)}
+          className="fixed bottom-10 left-10 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl flex items-center gap-3 text-slate-400 hover:text-white transition-all z-50 shadow-2xl backdrop-blur-md"
+        >
+          <span className="material-symbols-outlined">history</span>
+          <span className="text-sm font-bold uppercase tracking-widest">Candidate Records</span>
+        </button>
+
+        {isHistoryOpen && (
+          <CandidateHistoryPanel 
+            candidates={telemetry.candidates}
+            onClose={() => setIsHistoryOpen(false)}
+            comparingIds={comparingIds}
+            onToggleCompare={toggleCompare}
+            onGenerateRoadmap={handleGenerateRoadmap}
+            isGeneratingRoadmap={isGeneratingRoadmap}
+          />
+        )}
+      </div>
+    );
   }
 
   return (
@@ -84,23 +170,47 @@ export default function TutorScreenerPage() {
         {/* Header Bar */}
         <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-slate-900/80 backdrop-blur-xl flex-shrink-0">
           <div className="flex items-center gap-4">
-            {/* Agent status indicator in header */}
             <div className={`w-3 h-3 rounded-full animate-pulse ${state.isThinking ? 'bg-cyan-400' : state.isAiTalking ? 'bg-amber-400' : state.isListening ? 'bg-indigo-400' : 'bg-slate-500'}`} />
             <div>
               <h2 className="font-headline font-bold text-white text-lg leading-none">Nexus Dialogue</h2>
-              <p className="text-cyan-400/80 text-xs mt-0.5 font-mono">
-                {state.isThinking ? "PROCESSING_DIRECTIVE..." : state.isAiTalking ? "AI_TRANSMITTING..." : state.isListening ? "AUDIO_FEED_ACTIVE" : "ENCRYPTED_LINK_ESTABLISHED"}
+              <p className="text-cyan-400/80 text-xs mt-0.5 font-mono italic">
+                {state.isThinking ? "PROCESSING_DIRECTIVE..." : state.isTranscribing ? "TRANSCRIBING_COMMAND..." : state.isAiTalking ? "AI_TRANSMITTING..." : state.isListening ? "AUDIO_FEED_ACTIVE" : "ENCRYPTED_LINK_ESTABLISHED"}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <button 
+              onClick={() => { playClick(); setIsHistoryOpen(true); }}
+              onMouseEnter={playHover}
+              className="px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-slate-400 hover:text-white transition-all flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-[18px]">history</span>
+              <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">Records</span>
+            </button>
+            <button 
+              onClick={() => { playClick(); setIsWhiteboardOpen(true); }}
+              onMouseEnter={playHover}
+              className="px-3 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 rounded-xl text-indigo-400 hover:text-indigo-300 transition-all flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-[18px]">edit_square</span>
+              <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">Board</span>
+            </button>
+            <button 
+              onClick={() => { playClick(); actions.toggleVideo(); }}
+              onMouseEnter={playHover}
+              className={`px-3 py-2 border rounded-xl transition-all flex items-center gap-2 ${state.isVideoEnabled ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' : 'bg-white/5 border-white/10 text-slate-400 hover:text-white hover:bg-white/10'}`}
+            >
+              <span className="material-symbols-outlined text-[18px]">{state.isVideoEnabled ? 'videocam' : 'videocam_off'}</span>
+              <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">{state.isVideoEnabled ? 'Live' : 'Camera'}</span>
+            </button>
             <div className={`px-4 py-2 rounded-xl font-mono font-bold text-sm flex items-center gap-2 ${state.timer < 120 ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-white/10 text-slate-300 border border-white/10'}`}>
               <span className="material-symbols-outlined text-[16px]">timer</span>
               {formatTime(state.timer)}
             </div>
             {!state.interviewEnded && (
               <button
-                onClick={actions.endInterview}
+                onClick={() => { playClick(); actions.endInterview(); }}
+                onMouseEnter={playHover}
                 disabled={candidateMessages < 2}
                 className="px-4 py-2 bg-rose-600/20 border border-rose-500/30 text-rose-400 hover:bg-rose-600/40 rounded-xl text-xs uppercase tracking-widest font-bold transition-all disabled:opacity-30 flex items-center gap-2"
               >
@@ -113,16 +223,12 @@ export default function TutorScreenerPage() {
         {/* Dialogue Feed with Centered Sphere */}
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 custom-scrollbar bg-slate-950/20">
           
-          {/* ═══ AI Agent Sphere — pinned at top center of chat ═══ */}
           <div className="flex flex-col items-center py-4 sticky top-0 z-20">
-            {/* Aura glow behind */}
             <div className={`absolute w-[300px] h-[300px] rounded-full blur-[100px] transition-all duration-700 ${
               state.isAiTalking ? 'bg-amber-500/30 scale-110' : 
               state.isThinking ? 'bg-cyan-500/25 scale-95 animate-pulse' : 
               state.isListening ? 'bg-indigo-500/20 scale-100' : 'bg-indigo-600/15 scale-100'
             }`} />
-            
-            {/* Sphere container */}
             <div className={`relative z-10 rounded-full overflow-hidden border-4 shadow-2xl bg-black transition-all duration-500 ${
               agentActive 
                 ? 'w-44 h-44 border-cyan-400/40 shadow-[0_0_60px_rgba(6,182,212,0.3)]' 
@@ -134,18 +240,14 @@ export default function TutorScreenerPage() {
                 <AntiGravitySphere isTalking={state.isAiTalking} isThinking={state.isThinking} isListening={state.isListening} />
               </div>
             </div>
-
-            {/* Status chip below sphere */}
             <span className={`mt-3 text-[10px] font-mono font-bold uppercase tracking-[0.2em] px-3 py-1 rounded-full border backdrop-blur-md transition-all duration-300 ${
               state.isAiTalking ? 'text-amber-300 border-amber-500/30 bg-amber-900/20' :
               state.isThinking ? 'text-cyan-300 border-cyan-500/30 bg-cyan-900/20' :
               state.isListening ? 'text-indigo-300 border-indigo-500/30 bg-indigo-900/20' :
               'text-slate-500 border-white/10 bg-slate-900/30'
             }`}>
-              {state.isThinking ? "Analyzing..." : state.isAiTalking ? "Speaking" : state.isListening ? "Listening" : "Standby"}
+              {state.isThinking ? "Analyzing..." : state.isTranscribing ? "Transcribing..." : state.isAiTalking ? "Speaking" : state.isListening ? "Listening" : "Standby"}
             </span>
-            
-            {/* Audio visualizer when listening */}
             {state.isListening && (
               <div className="mt-3 bg-slate-900/60 backdrop-blur-md px-6 py-2 rounded-full border border-white/10 shadow-[0_0_20px_rgba(6,182,212,0.15)]">
                 <AudioVisualizer stream={state.audioStream} isActive={state.isListening} />
@@ -153,7 +255,6 @@ export default function TutorScreenerPage() {
             )}
           </div>
 
-          {/* ═══ Chat Messages ═══ */}
           {state.dialogue.map((msg, i) => (
             <div key={i} className={`flex ${msg.isAi ? "justify-start" : "justify-end"}`}>
               {msg.isReport ? (
@@ -170,7 +271,10 @@ export default function TutorScreenerPage() {
                   <div className="report-content" dangerouslySetInnerHTML={{
                     __html: (msg.text || '').replace(/## (.*)/g, '<h2>$1</h2>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/^- (.*)/gm, '<li>$1</li>').replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>').replace(/\n/g, '<p></p>')
                   }} />
-                  <div className="mt-6 pt-4 border-t border-indigo-500/10 flex justify-end">
+                  <div className="mt-6 pt-4 border-t border-indigo-500/10 flex flex-wrap gap-4 justify-between">
+                    <button onClick={() => setIsSaving(true)} className="px-6 py-2.5 bg-cyan-600/20 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-600/40 rounded-xl text-sm font-bold transition-all active:scale-95 flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[18px]">save</span> Save for Comparison
+                    </button>
                     <button onClick={downloadReport} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold transition-all active:scale-95 flex items-center gap-2 shadow-lg shadow-indigo-600/20">
                       <span className="material-symbols-outlined text-[18px]">picture_as_pdf</span> Export PDF
                     </button>
@@ -200,7 +304,7 @@ export default function TutorScreenerPage() {
             <div className="flex justify-start">
               <div className="max-w-[75%]">
                 <div className="flex items-center gap-2 mb-1 pl-1">
-                  <span className="text-cyan-400 text-[10px] font-mono uppercase tracking-widest">Sys.Interviewer</span>
+                   <span className="text-cyan-400 text-[10px] font-mono uppercase tracking-widest">Sys.Interviewer</span>
                 </div>
                 <div className="p-4 rounded-2xl bg-slate-800/80 border border-white/5 rounded-tl-none flex items-center gap-3">
                   <div className="flex gap-1 items-end h-5">
@@ -223,7 +327,11 @@ export default function TutorScreenerPage() {
                 disabled={state.isThinking}
                 className={`w-14 h-14 flex-shrink-0 ${state.isListening ? "bg-cyan-600 mic-pulse" : "bg-indigo-600 hover:bg-indigo-500"} text-white rounded-2xl flex items-center justify-center active:scale-90 transition-all`}
               >
-                <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>{state.isListening ? "mic_off" : "mic"}</span>
+                {state.isTranscribing ? (
+                  <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>{state.isListening ? "mic_off" : "mic"}</span>
+                )}
               </button>
               <div className="flex-1 relative">
                 <input
@@ -232,7 +340,7 @@ export default function TutorScreenerPage() {
                   onKeyDown={handleKeyDown}
                   disabled={state.isThinking}
                   className="w-full bg-slate-950/50 border border-white/10 rounded-2xl py-4 px-5 text-white font-mono text-sm focus:border-cyan-500/50 outline-none placeholder-slate-500 disabled:opacity-40 transition-all"
-                  placeholder={state.isListening ? "Listening to your voice..." : "Type response or initialize mic..."}
+                  placeholder={state.isTranscribing ? "Gemini is transcribing..." : state.isListening ? "Listening to your voice..." : "Type response or initialize mic..."}
                 />
               </div>
               <button
@@ -263,7 +371,175 @@ export default function TutorScreenerPage() {
         interviewEnded={state.interviewEnded}
         formatTime={formatTime}
         endInterview={actions.endInterview}
+        videoMetrics={state.videoMetrics}
+        isVideoEnabled={state.isVideoEnabled}
       />
+
+      {/* Candidate Save Modal (Handled inline for density) */}
+      {isSaving && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl">
+           <div className="bg-slate-900 border border-white/10 p-8 rounded-3xl w-full max-w-md shadow-2xl">
+              <h3 className="text-2xl font-black text-white mb-2">Save Record</h3>
+              <p className="text-slate-500 text-sm mb-6">Enter candidate name to store the evaluation results.</p>
+              <input 
+                autoFocus
+                type="text" 
+                value={candidateName}
+                onChange={(e) => setCandidateName(e.target.value)}
+                placeholder="Candidate Name"
+                className="w-full bg-slate-950 border border-white/10 rounded-xl px-5 py-4 text-white mb-6 focus:border-indigo-500/50 outline-none"
+              />
+              <div className="flex gap-4">
+                <button onClick={() => setIsSaving(false)} className="flex-1 py-3 text-slate-400 font-bold hover:text-white transition-all">Cancel</button>
+                <button onClick={handleSave} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-indigo-600/20">Save Details</button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Comparisons UI could be a modal or panel */}
+      {isHistoryOpen && (
+        <CandidateHistoryPanel 
+          candidates={telemetry.candidates}
+          onClose={() => setIsHistoryOpen(false)}
+          comparingIds={comparingIds}
+          onToggleCompare={toggleCompare}
+          onGenerateRoadmap={handleGenerateRoadmap}
+          isGeneratingRoadmap={isGeneratingRoadmap}
+        />
+      )}
+
+      {isWhiteboardOpen && (
+        <Whiteboard 
+          onClose={() => setIsWhiteboardOpen(false)} 
+          aiCommands={state.aiWhiteboardCommands}
+        />
+      )}
+
+      {/* Webcam PiP */}
+      {state.isVideoEnabled && state.videoStream && (
+        <div className="fixed bottom-6 right-6 z-50 group">
+          <div className="relative rounded-2xl overflow-hidden border-2 border-emerald-500/40 shadow-[0_0_40px_rgba(16,185,129,0.2)] bg-black">
+            <video
+              ref={refs.videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-48 h-36 object-cover"
+            />
+            <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-2 flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[9px] font-black uppercase text-emerald-400 tracking-wider">Live</span>
+              </div>
+              <div className="bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 rounded-lg">
+                <span className="text-[10px] font-black text-emerald-400">{state.videoMetrics.overallPresence}%</span>
+              </div>
+            </div>
+            <button
+              onClick={actions.toggleVideo}
+              className="absolute top-1.5 right-1.5 w-6 h-6 bg-black/60 hover:bg-rose-600/80 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+            >
+              <span className="material-symbols-outlined text-white text-xs">close</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+function CandidateHistoryPanel({ candidates, onClose, comparingIds, onToggleCompare, onGenerateRoadmap, isGeneratingRoadmap }: any) {
+  const selectedCandidates = candidates.filter((c: any) => comparingIds.includes(c.id));
+
+  return (
+    <div className="fixed inset-0 z-[60] flex justify-end">
+      <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-2xl bg-slate-900 h-full shadow-2xl border-l border-white/10 flex flex-col animate-slide-in-right">
+        <div className="p-8 border-b border-white/5 flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-black text-white">Candidate Records</h2>
+            <p className="text-slate-500 text-sm">Review and compare past evaluation data.</p>
+          </div>
+          <button onClick={onClose} className="w-10 h-10 rounded-full hover:bg-white/5 flex items-center justify-center text-slate-500 hover:text-white transition-all">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-8">
+          {comparingIds.length > 0 && (
+            <div className="bg-indigo-600/10 border border-indigo-500/20 rounded-3xl p-6">
+              <h3 className="text-indigo-400 font-black text-xs uppercase tracking-widest mb-4">Live Comparison Matrix</h3>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="col-span-1" />
+                {selectedCandidates.map((c: any) => (
+                   <div key={c.id} className="text-center font-bold text-white text-[10px] truncate px-1">
+                     {c.name}
+                   </div>
+                ))}
+              </div>
+              {['clarity', 'engagement', 'patience', 'adaptability'].map((metric) => (
+                <div key={metric} className="grid grid-cols-2 lg:grid-cols-4 gap-4 py-3 border-t border-white/5 items-center">
+                  <div className="text-[10px] uppercase font-black text-slate-500 tracking-tighter">{metric}</div>
+                  {selectedCandidates.map((c: any) => (
+                    <div key={c.id} className="text-center font-mono text-xs text-indigo-400 font-bold">
+                       {c.metrics[metric]}%
+                    </div>
+                  ))}
+                  {Array.from({ length: 3 - selectedCandidates.length }).map((_, i) => <div key={i} />)}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <h3 className="text-white font-bold text-sm">Recent Sessions (Max 5)</h3>
+            {candidates.length === 0 ? (
+              <div className="p-10 border border-dashed border-white/10 rounded-2xl text-center text-slate-500 text-sm italic">
+                No saved candidates found.
+              </div>
+            ) : (
+              candidates.map((c: any) => (
+                <div key={c.id} className={`p-5 rounded-2xl border transition-all ${comparingIds.includes(c.id) ? 'bg-indigo-600/20 border-indigo-500/40' : 'bg-white/[0.02] border-white/5 hover:border-white/10'}`}>
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h4 className="font-bold text-white text-lg">{c.name}</h4>
+                      <p className="text-slate-500 text-[10px] font-mono tracking-widest capitalize">{c.date}</p>
+                    </div>
+                    <button 
+                      onClick={() => onToggleCompare(c.id)}
+                      className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                        comparingIds.includes(c.id) ? 'bg-indigo-500 text-white' : 'bg-white/10 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {comparingIds.includes(c.id) ? 'Remove' : 'Select to Compare'}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {Object.entries(c.metrics).map(([key, val]: any) => (
+                      <div key={key} className="bg-black/20 p-2 rounded-lg text-center">
+                        <div className="text-[8px] uppercase text-slate-600 font-black mb-0.5">{key[0]}</div>
+                        <div className="text-[10px] font-bold text-white">{val}%</div>
+                      </div>
+                    ))}
+                  </div>
+                  <button 
+                    onClick={() => onGenerateRoadmap(c)}
+                    disabled={isGeneratingRoadmap === c.id}
+                    className="w-full mt-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/30 text-emerald-400 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">
+                      {isGeneratingRoadmap === c.id ? 'sync' : 'auto_graph'}
+                    </span>
+                    {isGeneratingRoadmap === c.id ? 'Analyzing Performance...' : 'Generate Learning Roadmap'}
+                  </button>
+                </div>
+              ))
+             )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+

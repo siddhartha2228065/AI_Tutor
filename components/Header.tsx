@@ -1,6 +1,10 @@
 import Image from "next/image";
+import { useTheme } from "./ThemeContext";
+import { useSound } from "@/hooks/useSound";
 
 export default function Header() {
+  const { theme, toggle } = useTheme();
+  const { playHover, playClick, playThemeSwitch } = useSound();
   return (
     <header className="w-full sticky top-0 z-40 bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-xl flex justify-between items-center px-6 py-3 font-['Plus_Jakarta_Sans'] font-medium">
       <div className="flex items-center gap-4 flex-1 max-w-xl">
@@ -14,10 +18,28 @@ export default function Header() {
         </div>
       </div>
       <div className="flex items-center gap-4">
-        <button className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors rounded-full active:scale-95 duration-200">
+        <button 
+          onClick={() => { toggle(); playThemeSwitch(); }}
+          onMouseEnter={playHover}
+          className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors rounded-full active:scale-95 duration-200"
+          title={`Switch to ${theme === 'nexus' ? 'Brand' : 'Nexus'} theme`}
+        >
+          <span className="material-symbols-outlined">
+            {theme === 'nexus' ? 'light_mode' : 'dark_mode'}
+          </span>
+        </button>
+        <button 
+          onClick={playClick}
+          onMouseEnter={playHover}
+          className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors rounded-full active:scale-95 duration-200"
+        >
           <span className="material-symbols-outlined">notifications</span>
         </button>
-        <button className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors rounded-full active:scale-95 duration-200">
+        <button 
+          onClick={playClick}
+          onMouseEnter={playHover}
+          className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors rounded-full active:scale-95 duration-200"
+        >
           <span className="material-symbols-outlined">settings</span>
         </button>
         <div className="flex items-center gap-6 pl-6 border-l border-white/5">

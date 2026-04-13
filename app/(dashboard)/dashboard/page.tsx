@@ -14,10 +14,10 @@ export default function DashboardPage() {
   if (!telemetry.isHydrated) return <div className="p-8">Loading dashboard...</div>;
 
   return (
-    <div className="px-6 py-8 max-w-7xl mx-auto space-y-10 w-full min-h-screen text-slate-200">
+    <div className="px-6 py-8 max-w-7xl mx-auto space-y-2 w-full min-h-screen text-slate-200">
       {/* Welcome & Hero Section */}
-      <section className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start pt-8">
-        <div className="md:col-span-12 lg:col-span-8 flex flex-col gap-8">
+      <section className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start pt-2">
+        <div className="md:col-span-12 lg:col-span-8 flex flex-col gap-6">
           <div>
             <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight mb-4">
               Welcome back to <span className="text-indigo-400">Cuemath.</span>
@@ -117,6 +117,55 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Upcoming Sessions */}
+        <div className="md:col-span-12 lg:col-span-6 glass-card rounded-3xl p-8 border-white/5 bg-emerald-500/[0.02]">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-xl font-bold text-white font-headline">Upcoming Live Sessions</h3>
+            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full">3 Scheduled</span>
+          </div>
+          <div className="space-y-4">
+            {telemetry.upcomingLessons.map((lesson) => (
+              <div key={lesson.id} className="flex items-center justify-between p-4 bg-white/[0.02] rounded-2xl border border-white/5 hover:bg-white/[0.05] transition-all">
+                <div className="flex items-center gap-4">
+                  <div className={`w-10 h-10 rounded-xl ${lesson.bg} flex items-center justify-center`}>
+                    <span className="material-symbols-outlined text-sm">event</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white">{lesson.topic}</p>
+                    <p className="text-[10px] text-slate-500 font-medium">with {lesson.tutor}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-black text-white">{lesson.time}</p>
+                  <p className="text-[9px] text-emerald-400 uppercase font-black">Joining soon</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Peer Challenges */}
+        <div className="md:col-span-12 lg:col-span-6 glass-card rounded-3xl p-8 border-white/5 bg-rose-500/[0.02]">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-xl font-bold text-white font-headline">Peer Challenges</h3>
+            <span className="material-symbols-outlined text-rose-500">trophy</span>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {telemetry.socialChallenges.map((challenge) => (
+              <div key={challenge.id} className="p-4 bg-white/[0.02] rounded-2xl border border-white/5 flex items-center gap-3">
+                <img src={challenge.avatar} alt={challenge.user} className="w-8 h-8 rounded-full border border-white/10" />
+                <div>
+                  <p className="text-xs font-bold text-white">{challenge.user}</p>
+                  <p className="text-[10px] text-rose-400 font-black">{challenge.score} XP</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button className="w-full mt-6 py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all border border-rose-500/20">
+            Invite Friends
+          </button>
         </div>
 
         {/* Continue Learning */}

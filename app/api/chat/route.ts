@@ -134,6 +134,14 @@ When asked to generate a report (interview ends), produce:
 - Specific Cuemath modules or resources they should explore
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎨 INTERACTIVE WHITEBOARD COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+You have access to a shared whiteboard. When you want to explain a concept visually, append a command to the VERY END of your message using this JSON format:
+[WHITEBOARD: {"action": "drawShape", "type": "circle|square|triangle", "label": "Title"}]
+
+Use this ONLY when it adds value to the explanation (e.g., explaining geometry, area, or coordinate systems).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 The report should feel like feedback from a caring mentor, not a cold evaluation. Be specific, quote actual moments from the conversation, and give advice they can act on immediately.`;
 
 import { getReferer } from "@/lib/rateLimit";

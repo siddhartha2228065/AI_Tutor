@@ -28,22 +28,14 @@ export default function AnalyticsPage() {
     document.body.removeChild(link);
   };
 
-  const topics = [
-    { name: "Algebra", mastery: 92, status: "Expert" },
-    { name: "Calculus", mastery: 45, status: "Learning" },
-    { name: "Geometry", mastery: 78, status: "Advanced" },
-    { name: "Trig", mastery: 64, status: "Steady" },
-    { name: "Statistics", mastery: 30, status: "Beginner" },
-    { name: "Logic", mastery: 85, status: "Expert" },
-    { name: "Arithmetic", mastery: 98, status: "Master" },
-    { name: "Functions", mastery: 55, status: "Steady" },
-  ];
-
+  const topics = telemetry.topicsMastery;
   const badges = [
     { name: "Algebra Ace", icon: "functions", color: "bg-indigo-500", glow: "shadow-indigo-500/40" },
     { name: "30 Day Streak", icon: "local_fire_department", color: "bg-orange-500", glow: "shadow-orange-500/40" },
     { name: "Geometry Guru", icon: "change_history", color: "bg-teal-500", glow: "shadow-teal-500/40" },
     { name: "Late Night Learner", icon: "dark_mode", color: "bg-slate-700", glow: "shadow-slate-700/40" },
+    { name: "Quick Thinker", icon: "bolt", color: "bg-yellow-500", glow: "shadow-yellow-500/40" },
+    { name: "Problem Solver", icon: "psychology", color: "bg-rose-500", glow: "shadow-rose-500/40" },
   ];
 
   return (

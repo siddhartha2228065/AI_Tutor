@@ -27,6 +27,37 @@
   --font-inter: "Inter", sans-serif;
 }
 
+:root[data-theme="brand"] {
+  --color-background: #ffffff;
+  --color-surface: #f8fafc;
+  --color-on-surface: #0f172a;
+  
+  /* Invert Slate for Light Theme */
+  --color-slate-950: #ffffff;
+  --color-slate-900: #f8fafc;
+  --color-slate-800: #e2e8f0;
+  --color-slate-500: #64748b;
+  --color-slate-400: #475569;
+  --color-slate-300: #334155;
+  --color-slate-200: #1e293b;
+  
+  /* Invert White/Black */
+  --color-white: #0f172a;
+  --color-black: #ffffff;
+
+  /* Map Indigo to Cuemath Mint */
+  --color-indigo-300: #34d399;
+  --color-indigo-400: #10b981;
+  --color-indigo-500: #059669;
+  --color-indigo-600: #047857;
+
+  /* Map Cyan to Cuemath Amber/Yellow */
+  --color-cyan-300: #fcd34d;
+  --color-cyan-400: #fbbf24;
+  --color-cyan-500: #f59e0b;
+  --color-cyan-600: #d97706;
+}
+
 .glass-card {
   @apply bg-white/[0.03] backdrop-blur-xl border border-white/[0.08] shadow-2xl;
 }
@@ -69,7 +100,16 @@
 }
 
   .animate-slide-in {
-    animation: slide-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    @apply motion-safe:animate-[slide-in_0.35s_cubic-bezier(0.16,1,0.3,1)_forwards];
+  }
+
+  @keyframes slide-in-right {
+    0% { transform: translateX(100%); }
+    100% { transform: translateX(0); }
+  }
+
+  .animate-slide-in-right {
+    animation: slide-in-right 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 
   /* Force hide native video controls overlays */

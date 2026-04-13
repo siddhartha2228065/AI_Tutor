@@ -112,7 +112,7 @@ export default function MainLandingPage() {
       </div>
 
       {/* 3. Hero Content */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 mt-24 text-center">
+      <main id="hero" className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 mt-24 text-center">
         
         {/* Badges */}
         <div className="flex items-center justify-center gap-3 mb-8">

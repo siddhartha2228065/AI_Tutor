@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+// Unified Telemetry & Logic Store
 import { useTelemetryStore } from "@/hooks/useTelemetryStore";
 
 export interface Message {
@@ -13,6 +14,14 @@ export interface ScreenerMetrics {
   engagement: number;
   patience: number;
   adaptability: number;
+}
+
+export interface VideoMetrics {
+  eyeContact: number;
+  gestures: number;
+  smileFrequency: number;
+  posture: number;
+  overallPresence: number;
 }
 
 export function useScreenerLogic(showToast: (msg: string, type: "success" | "error" | "info" | "warning") => void) {
@@ -34,43 +43,191 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
   });
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const recognitionRef = useRef<any>(null);
   const reportRef = useRef<HTMLDivElement>(null);
   const dialogueEndRef = useRef<HTMLDivElement>(null);
 
-  // Initialize Speech Recognition
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const SpeechRecognition =
-        (window as any).SpeechRecognition ||
-        (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        const recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = "en-US";
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState("");
+  const [aiWhiteboardCommands, setAiWhiteboardCommands] = useState<any[]>([]);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
-        recognition.onresult = (event: any) => {
-          let currentTranscript = "";
-          let isFinal = false;
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
-            currentTranscript += event.results[i][0].transcript;
-            if (event.results[i].isFinal) isFinal = true;
-          }
-          setInputValue(currentTranscript);
-          if (isFinal) {
-            recognition.stop();
-            setIsListening(false);
-            handleSend(currentTranscript);
-          }
-        };
+  // ─── Video Analysis State ──────────────────────────────
+  const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(false);
+  const [videoMetrics, setVideoMetrics] = useState<VideoMetrics>({
+    eyeContact: 0, gestures: 0, smileFrequency: 0, posture: 0, overallPresence: 0
+  });
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const videoSnapshotCount = useRef(0);
 
-        recognition.onerror = () => setIsListening(false);
-        recognition.onend = () => setIsListening(false);
-        recognitionRef.current = recognition;
+  const captureAndAnalyzeFrame = async () => {
+    if (!videoRef.current || !isVideoEnabled) return;
+    try {
+      const video = videoRef.current;
+      const canvas = document.createElement("canvas");
+      canvas.width = 320; // Low-res is fine for analysis
+      canvas.height = 240;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(video, 0, 0, 320, 240);
+      const frame = canvas.toDataURL("image/jpeg", 0.6);
+
+      const res = await fetch("/api/video-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ frame }),
+      });
+      if (!res.ok) return;
+      const scores = await res.json();
+      videoSnapshotCount.current += 1;
+      const n = videoSnapshotCount.current;
+
+      // Running average across all snapshots
+      setVideoMetrics(prev => ({
+        eyeContact: Math.round((prev.eyeContact * (n - 1) + scores.eyeContact) / n),
+        gestures: Math.round((prev.gestures * (n - 1) + scores.gestures) / n),
+        smileFrequency: Math.round((prev.smileFrequency * (n - 1) + scores.smileFrequency) / n),
+        posture: Math.round((prev.posture * (n - 1) + scores.posture) / n),
+        overallPresence: Math.round((prev.overallPresence * (n - 1) + scores.overallPresence) / n),
+      }));
+    } catch (e) {
+      console.warn("Video frame analysis failed:", e);
+    }
+  };
+
+  const toggleVideo = async () => {
+    if (isVideoEnabled && videoStream) {
+      videoStream.getTracks().forEach(t => t.stop());
+      setVideoStream(null);
+      setIsVideoEnabled(false);
+      if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: "user" } });
+      setVideoStream(stream);
+      setIsVideoEnabled(true);
+      showToast("📷 Camera active — analyzing non-verbal cues", "info");
+      // Start 30-second analysis interval
+      videoIntervalRef.current = setInterval(captureAndAnalyzeFrame, 30000);
+      // Also run one immediate analysis after 3s to warm up
+      setTimeout(captureAndAnalyzeFrame, 3000);
+    } catch (e) {
+      showToast("Camera access denied or unavailable.", "error");
+    }
+  };
+
+  // Removed legacy SpeechRecognition effect and replaced with MediaRecorder + Live Preview
+  const startRecording = async () => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast("Recording not supported in this browser.", "error");
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setAudioStream(stream);
+
+      // 1. Setup Live Preview (Low latency, browser-level)
+      if (typeof window !== "undefined") {
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (SpeechRecognition) {
+          const recognition = new SpeechRecognition();
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.onresult = (event: any) => {
+            let current = "";
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+              current += event.results[i][0].transcript;
+            }
+            setLiveTranscript(current);
+          };
+          recognition.start();
+          recognitionRef.current = recognition;
+        }
+      }
+      
+      // 2. Setup Master Recording (High precision, backend-level)
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") 
+        ? "audio/webm" 
+        : MediaRecorder.isTypeSupported("audio/mp4") 
+          ? "audio/mp4" 
+          : "";
+
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        const finalBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        if (finalBlob.size < 1000) {
+          setLiveTranscript("");
+          return;
+        }
+        await handleTranscription(finalBlob);
+      };
+
+      recorder.start();
+      setIsListening(true);
+    } catch (err) {
+      console.error("Recording error:", err);
+      showToast("Microphone access denied or error occurred.", "error");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (e) {}
+      }
+      setIsListening(false);
+      // Immediately stop the visualizer stream to save CPU
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+        setAudioStream(null);
       }
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  };
+
+  const handleTranscription = async (blob: Blob) => {
+    setIsTranscribing(true);
+    try {
+      const formData = new FormData();
+      const extension = blob.type.includes("mp4") ? "mp4" : "webm";
+      formData.append("audio", blob, `audio.${extension}`);
+
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (data.text && data.text.trim()) {
+        // Finalize: Replace live preview with cleaned Gemini result
+        setLiveTranscript("");
+        setInputValue(prev => {
+          const trimmedText = data.text.trim();
+          if (!prev) return trimmedText;
+          return prev.endsWith(" ") ? prev + trimmedText : prev + " " + trimmedText;
+        });
+      } else if (data.error) {
+        showToast("Transcription failed.", "error");
+      }
+    } catch (e) {
+      showToast("Failed to reach transcription server.", "error");
+    } finally {
+      setIsTranscribing(false);
+      setLiveTranscript("");
+    }
+  };
 
   // Monitor AI Speech for animation
   useEffect(() => {
@@ -95,38 +252,62 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
     }
   }, [timer]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Cleanup effect
+  // Cleanup effects
   useEffect(() => {
     return () => {
       if (audioStream) {
         audioStream.getTracks().forEach((t) => t.stop());
       }
-      if (timerRef.current) clearInterval(timerRef.current);
       if (typeof window !== "undefined") window.speechSynthesis.cancel();
     };
   }, [audioStream]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
 
   // Persist metrics & dialogue
   useEffect(() => {
     if (dialogue.length > 0 && interviewStarted) {
       localStorage.setItem("cuemath_screener_history", JSON.stringify(dialogue));
       localStorage.setItem("cuemath_screener_metrics", JSON.stringify(metrics));
+      localStorage.setItem("cuemath_screener_timer", timer.toString());
     }
-  }, [dialogue, metrics, interviewStarted]);
+  }, [dialogue, metrics, timer, interviewStarted]);
 
   // Load from local storage on mount
   useEffect(() => {
     const saved = localStorage.getItem("cuemath_screener_history");
     const savedMetrics = localStorage.getItem("cuemath_screener_metrics");
+    const savedTimer = localStorage.getItem("cuemath_screener_timer");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (parsed.length > 0) {
           setDialogue(parsed);
           setInterviewStarted(true);
-          if (parsed.some((m: Message) => m.isReport)) {
+          const isEnded = parsed.some((m: Message) => m.isReport);
+          if (isEnded) {
             setInterviewEnded(true);
             if (timerRef.current) clearInterval(timerRef.current);
+          } else {
+            // Resume from saved time or default
+            if (savedTimer) setTimer(parseInt(savedTimer));
+            
+            // Resume timer interval if interview was in progress
+            if (!timerRef.current) {
+               timerRef.current = setInterval(() => {
+                 setTimer((prev) => {
+                   if (prev <= 1) {
+                     if (timerRef.current) clearInterval(timerRef.current);
+                     return 0;
+                   }
+                   return prev - 1;
+                 });
+               }, 1000);
+            }
           }
         }
       } catch {}
@@ -180,8 +361,19 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
         body: JSON.stringify({ messages: [], generateReport: false }),
       });
       const data = await response.json();
-      setDialogue([{ speaker: "Interviewer AI", text: data.text, isAi: true }]);
-      playTTS(data.text);
+      
+      let cleanText = data.text;
+      const whiteboardMatch = data.text.match(/\[WHITEBOARD:\s*(\{.*?\})\]/);
+      if (whiteboardMatch) {
+        try {
+          const cmd = JSON.parse(whiteboardMatch[1]);
+          setAiWhiteboardCommands(prev => [...prev, cmd]);
+          cleanText = data.text.replace(/\[WHITEBOARD:\s*(\{.*?\})\]/, "").trim();
+        } catch (e) {}
+      }
+
+      setDialogue([{ speaker: "Interviewer AI", text: cleanText, isAi: true }]);
+      playTTS(cleanText);
     } catch (e: any) {
       showToast("Failed to start interview. Check your connection.", "error");
     } finally {
@@ -191,9 +383,15 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
 
   const endInterview = async () => {
     if (timerRef.current) clearInterval(timerRef.current);
+    if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
     if (audioStream) {
       audioStream.getTracks().forEach((t) => t.stop());
       setAudioStream(null);
+    }
+    if (videoStream) {
+      videoStream.getTracks().forEach((t) => t.stop());
+      setVideoStream(null);
+      setIsVideoEnabled(false);
     }
     setInterviewEnded(true);
     setIsListening(false);
@@ -223,26 +421,11 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
   };
 
   const toggleListen = async () => {
-    if (!recognitionRef.current) {
-      showToast("Voice recognition not supported in this browser. Please type instead.", "warning");
-      return;
-    }
-
     if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
+      stopRecording();
     } else {
       window.speechSynthesis.cancel();
-      try {
-        if (!audioStream) {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          setAudioStream(stream);
-        }
-        recognitionRef.current.start();
-        setIsListening(true);
-      } catch (err) {
-        showToast("Microphone access denied.", "error");
-      }
+      await startRecording();
     }
   };
 
@@ -250,9 +433,8 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
     const text = textOverride || inputValue;
     if (!text.trim() || !interviewStarted || interviewEnded) return;
 
-    if (isListening && recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsListening(false);
+    if (isListening) {
+      stopRecording();
     }
 
     const newMsg: Message = { speaker: "Candidate", text, isAi: false };
@@ -277,11 +459,23 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
 
+      let cleanText = data.text;
+      const whiteboardMatch = data.text.match(/\[WHITEBOARD:\s*(\{.*?\})\]/);
+      if (whiteboardMatch) {
+        try {
+          const cmd = JSON.parse(whiteboardMatch[1]);
+          setAiWhiteboardCommands(prev => [...prev, cmd]);
+          cleanText = data.text.replace(/\[WHITEBOARD:\s*(\{.*?\})\]/, "").trim();
+        } catch (e) {
+          console.error("Whiteboard command parse error", e);
+        }
+      }
+
       setDialogue((prev) => [
         ...prev,
-        { speaker: "Interviewer AI", text: data.text, isAi: true },
+        { speaker: "Interviewer AI", text: cleanText, isAi: true },
       ]);
-      playTTS(data.text);
+      playTTS(cleanText);
     } catch (e: any) {
       showToast("AI response failed. " + (e.message || "Please retry."), "error");
     } finally {
@@ -297,19 +491,22 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
     setInterviewEnded(false);
     setTimer(600);
     setMetrics({ clarity: 0, engagement: 0, patience: 0, adaptability: 0 });
+    setVideoMetrics({ eyeContact: 0, gestures: 0, smileFrequency: 0, posture: 0, overallPresence: 0 });
+    videoSnapshotCount.current = 0;
     showToast("Neurolink reset. Ready for a new candidate.", "success");
   };
 
   return {
     state: {
       isListening, isThinking, isAiTalking, interviewStarted, interviewEnded, 
-      timer, inputValue, dialogue, metrics, audioStream
+      timer, inputValue, dialogue, metrics, audioStream, isTranscribing, 
+      liveTranscript, aiWhiteboardCommands, videoStream, isVideoEnabled, videoMetrics
     },
     refs: {
-      reportRef, dialogueEndRef
+      reportRef, dialogueEndRef, videoRef
     },
     actions: {
-      setInputValue, startInterview, endInterview, toggleListen, handleSend, resetSession
+      setInputValue, startInterview, endInterview, toggleListen, handleSend, resetSession, toggleVideo
     }
   };
 }
