@@ -292,14 +292,19 @@ export default function TutorScreenerPage() {
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                     <div className="md:col-span-2 report-content" dangerouslySetInnerHTML={{
-                      __html: (msg.text || '').replace(/## (.*)/g, '<h2>$1</h2>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/^- (.*)/gm, '<li>$1</li>').replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>').replace(/\n/g, '<p></p>')
+                      __html: (msg.text || '')
+                        .replace(/## (.*)/g, '<h2>$1</h2>')
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/^- (.*)/gm, '<li>$1</li>')
+                        .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+                        .split('\n\n').map(p => p.trim() ? `<p>${p.replace(/\n/g, '<br/>')}</p>` : '').join('')
                     }} />
                     
                     <div className="space-y-6">
                       {msg.reportMetrics && (
                         <div className="bg-slate-900/50 rounded-2xl p-4 border border-white/5">
                           <h3 className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-2">Candidate Attributes</h3>
-                          <div className="h-48">
+                          <div className="aspect-square w-full max-w-[240px] mx-auto">
                             <MasteryRadar data={msg.reportMetrics} />
                           </div>
                         </div>

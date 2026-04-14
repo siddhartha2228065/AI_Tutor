@@ -46,7 +46,7 @@ export default function MasteryRadar({ data }: MasteryRadarProps) {
   const gridLevels = [0.2, 0.4, 0.6, 0.8, 1];
 
   return (
-    <div className="relative flex items-center justify-center w-full h-full min-h-[300px]">
+    <div className="relative flex items-center justify-center w-full h-full">
       <motion.div
         animate={{ rotate: 360 }}
         transition={{ duration: 60, repeat: Infinity, ease: "linear" }}
