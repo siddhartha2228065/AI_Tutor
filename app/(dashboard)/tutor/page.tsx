@@ -10,6 +10,7 @@ import AudioVisualizer from "@/components/AudioVisualizer";
 import PreStartScreen from "@/components/tutor/PreStartScreen";
 import LiveMetricsPanel from "@/components/tutor/LiveMetricsPanel";
 import Whiteboard from "@/components/tutor/Whiteboard";
+import MasteryRadar from "@/components/dashboard/MasteryRadar";
 import { useState, useEffect } from "react";
 import { useTelemetryStore } from "@/hooks/useTelemetryStore";
 import { useRouter } from "next/navigation";
@@ -57,6 +58,12 @@ export default function TutorScreenerPage() {
   };
 
   const candidateMessages = state.dialogue.filter((m) => !m.isAi).length;
+  const spokenCount = state.dialogue.filter((m) => !m.isAi && m.isSpoken).length;
+  const typedCount = state.dialogue.filter((m) => !m.isAi && !m.isSpoken).length;
+  const tabSwitches = state.fraudFlags?.filter((f: any) => f.type === "tab_switch").length || 0;
+  const fullscreenExits = state.fraudFlags?.filter((f: any) => f.type === "fullscreen_exit").length || 0;
+  const totalFraud = tabSwitches + fullscreenExits;
+  
   const agentActive = state.isAiTalking || state.isThinking;
 
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -64,6 +71,7 @@ export default function TutorScreenerPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [candidateName, setCandidateName] = useState("");
   const [isWhiteboardOpen, setIsWhiteboardOpen] = useState(false);
+  const [isMetricsOpen, setIsMetricsOpen] = useState(false);
   const { playHover, playClick } = useSound();
 
   // Bind video stream to the video element when it changes
@@ -139,7 +147,7 @@ export default function TutorScreenerPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col xl:flex-row h-[calc(100vh-80px)] overflow-hidden bg-slate-950 text-slate-200 relative">
+    <div className="flex-1 flex flex-col xl:flex-row h-full min-h-[calc(100svh-140px)] lg:h-[calc(100vh-80px)] overflow-hidden bg-slate-950 text-slate-200 relative">
       <style jsx global>{`
         .mic-pulse { animation: mic-glow 1.8s infinite; }
         @keyframes mic-glow {
@@ -172,13 +180,21 @@ export default function TutorScreenerPage() {
           <div className="flex items-center gap-4">
             <div className={`w-3 h-3 rounded-full animate-pulse ${state.isThinking ? 'bg-cyan-400' : state.isAiTalking ? 'bg-amber-400' : state.isListening ? 'bg-indigo-400' : 'bg-slate-500'}`} />
             <div>
-              <h2 className="font-headline font-bold text-white text-lg leading-none">Nexus Dialogue</h2>
-              <p className="text-cyan-400/80 text-xs mt-0.5 font-mono italic">
+              <h2 className="font-headline font-bold text-white text-base md:text-lg leading-none">Nexus Dialogue</h2>
+              <p className="text-cyan-400/80 text-[9px] md:text-xs mt-0.5 font-mono italic truncate max-w-[120px] md:max-w-none">
                 {state.isThinking ? "PROCESSING_DIRECTIVE..." : state.isTranscribing ? "TRANSCRIBING_COMMAND..." : state.isAiTalking ? "AI_TRANSMITTING..." : state.isListening ? "AUDIO_FEED_ACTIVE" : "ENCRYPTED_LINK_ESTABLISHED"}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3">
+            <button 
+              onClick={() => { playClick(); setIsMetricsOpen(true); }}
+              onMouseEnter={playHover}
+              className="lg:hidden px-3 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 rounded-xl text-indigo-400 hover:text-indigo-300 transition-all flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-[18px]">analytics</span>
+              <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">Metrics</span>
+            </button>
             <button 
               onClick={() => { playClick(); setIsHistoryOpen(true); }}
               onMouseEnter={playHover}
@@ -203,8 +219,8 @@ export default function TutorScreenerPage() {
               <span className="material-symbols-outlined text-[18px]">{state.isVideoEnabled ? 'videocam' : 'videocam_off'}</span>
               <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">{state.isVideoEnabled ? 'Live' : 'Camera'}</span>
             </button>
-            <div className={`px-4 py-2 rounded-xl font-mono font-bold text-sm flex items-center gap-2 ${state.timer < 120 ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-white/10 text-slate-300 border border-white/10'}`}>
-              <span className="material-symbols-outlined text-[16px]">timer</span>
+            <div className={`px-2 md:px-4 py-2 rounded-xl font-mono font-bold text-[10px] md:text-sm flex items-center gap-2 ${state.timer < 120 ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-white/10 text-slate-300 border border-white/10'}`}>
+              <span className="material-symbols-outlined text-[14px] md:text-[16px]">timer</span>
               {formatTime(state.timer)}
             </div>
             {!state.interviewEnded && (
@@ -231,12 +247,12 @@ export default function TutorScreenerPage() {
             }`} />
             <div className={`relative z-10 rounded-full overflow-hidden border-4 shadow-2xl bg-black transition-all duration-500 ${
               agentActive 
-                ? 'w-44 h-44 border-cyan-400/40 shadow-[0_0_60px_rgba(6,182,212,0.3)]' 
-                : 'w-32 h-32 border-white/20 shadow-[0_0_30px_rgba(99,102,241,0.15)]'
+                ? 'w-32 h-32 md:w-44 md:h-44 border-cyan-400/40 shadow-[0_0_60px_rgba(6,182,212,0.3)]' 
+                : 'w-24 h-24 md:w-32 md:h-32 border-white/20 shadow-[0_0_30px_rgba(99,102,241,0.15)]'
             }`}
               style={{ animation: agentActive ? 'sphere-breathe 3s ease-in-out infinite' : 'none' }}
             >
-              <div style={{ width: agentActive ? '176px' : '128px', height: agentActive ? '176px' : '128px', position: 'relative' }}>
+              <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                 <AntiGravitySphere isTalking={state.isAiTalking} isThinking={state.isThinking} isListening={state.isListening} />
               </div>
             </div>
@@ -263,14 +279,60 @@ export default function TutorScreenerPage() {
                     <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center">
                       <span className="material-symbols-outlined text-indigo-400" style={{ fontVariationSettings: "'FILL' 1" }}>assessment</span>
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <div className="text-indigo-300 font-bold text-sm">Interview Evaluation Report</div>
                       <div className="text-slate-600 text-xs font-mono">Generated by Nexus Evaluator</div>
                     </div>
+                    {msg.reportMetrics?.recommendation && (
+                       <div className="px-4 py-2 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-emerald-400 font-bold text-sm shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                         {msg.reportMetrics.recommendation} ({msg.reportMetrics.confidence}%)
+                       </div>
+                    )}
                   </div>
-                  <div className="report-content" dangerouslySetInnerHTML={{
-                    __html: (msg.text || '').replace(/## (.*)/g, '<h2>$1</h2>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/^- (.*)/gm, '<li>$1</li>').replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>').replace(/\n/g, '<p></p>')
-                  }} />
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div className="md:col-span-2 report-content" dangerouslySetInnerHTML={{
+                      __html: (msg.text || '').replace(/## (.*)/g, '<h2>$1</h2>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/^- (.*)/gm, '<li>$1</li>').replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>').replace(/\n/g, '<p></p>')
+                    }} />
+                    
+                    <div className="space-y-6">
+                      {msg.reportMetrics && (
+                        <div className="bg-slate-900/50 rounded-2xl p-4 border border-white/5">
+                          <h3 className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-2">Candidate Attributes</h3>
+                          <div className="h-48">
+                            <MasteryRadar data={msg.reportMetrics} />
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="bg-slate-900/50 rounded-2xl p-4 border border-white/5">
+                         <h3 className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-3">Integrity & Biometrics</h3>
+                         <div className="space-y-3">
+                           <div>
+                             <div className="text-[10px] text-slate-500 font-mono">PRIMARY INPUT MODE</div>
+                             <div className="text-sm font-bold flex items-center gap-2">
+                               {spokenCount >= typedCount ? (
+                                  <span className="text-emerald-400 flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">mic</span> Voice Verified ({spokenCount} / {spokenCount + typedCount} turns)</span>
+                               ) : (
+                                  <span className="text-amber-400 flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">keyboard</span> Keyboard Heavy ({typedCount} / {spokenCount + typedCount} turns)</span>
+                               )}
+                             </div>
+                           </div>
+                           <div>
+                             <div className="text-[10px] text-slate-500 font-mono">ATTENTION TRACKING</div>
+                             <div className="text-sm font-bold">
+                               {totalFraud === 0 ? (
+                                 <span className="text-emerald-400 flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">visibility</span> Focus Maintained</span>
+                               ) : (
+                                 <span className="text-rose-400 flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">warning</span> {totalFraud} Violation{totalFraud > 1 ? 's' : ''} Detected</span>
+                               )}
+                             </div>
+                           </div>
+                         </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="mt-6 pt-4 border-t border-indigo-500/10 flex flex-wrap gap-4 justify-between">
                     <button onClick={() => setIsSaving(true)} className="px-6 py-2.5 bg-cyan-600/20 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-600/40 rounded-xl text-sm font-bold transition-all active:scale-95 flex items-center gap-2">
                       <span className="material-symbols-outlined text-[18px]">save</span> Save for Comparison
@@ -373,12 +435,14 @@ export default function TutorScreenerPage() {
         endInterview={actions.endInterview}
         videoMetrics={state.videoMetrics}
         isVideoEnabled={state.isVideoEnabled}
+        isOpen={isMetricsOpen}
+        onClose={() => setIsMetricsOpen(false)}
       />
 
       {/* Candidate Save Modal (Handled inline for density) */}
       {isSaving && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl">
-           <div className="bg-slate-900 border border-white/10 p-8 rounded-3xl w-full max-w-md shadow-2xl">
+           <div className="bg-slate-900 border border-white/10 p-6 md:p-8 rounded-3xl w-full max-w-sm md:max-w-md shadow-2xl">
               <h3 className="text-2xl font-black text-white mb-2">Save Record</h3>
               <p className="text-slate-500 text-sm mb-6">Enter candidate name to store the evaluation results.</p>
               <input 
@@ -455,8 +519,8 @@ function CandidateHistoryPanel({ candidates, onClose, comparingIds, onToggleComp
   return (
     <div className="fixed inset-0 z-[60] flex justify-end">
       <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl bg-slate-900 h-full shadow-2xl border-l border-white/10 flex flex-col animate-slide-in-right">
-        <div className="p-8 border-b border-white/5 flex items-center justify-between">
+      <div className="relative w-full lg:max-w-2xl bg-slate-900 h-full shadow-2xl border-l border-white/10 flex flex-col animate-slide-in-right">
+        <div className="p-4 md:p-8 border-b border-white/5 flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-black text-white">Candidate Records</h2>
             <p className="text-slate-500 text-sm">Review and compare past evaluation data.</p>
@@ -466,10 +530,10 @@ function CandidateHistoryPanel({ candidates, onClose, comparingIds, onToggleComp
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar space-y-8">
           {comparingIds.length > 0 && (
-            <div className="bg-indigo-600/10 border border-indigo-500/20 rounded-3xl p-6">
-              <h3 className="text-indigo-400 font-black text-xs uppercase tracking-widest mb-4">Live Comparison Matrix</h3>
+            <div className="bg-indigo-600/10 border border-indigo-500/20 rounded-3xl p-4 md:p-6">
+              <h3 className="text-indigo-400 font-black text-[10px] md:text-xs uppercase tracking-widest mb-4">Live Comparison Matrix</h3>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="col-span-1" />
                 {selectedCandidates.map((c: any) => (

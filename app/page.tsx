@@ -66,7 +66,7 @@ export default function MainLandingPage() {
   };
 
   return (
-    <div className="relative min-h-screen bg-black overflow-hidden flex flex-col font-sans">
+    <div className="relative min-h-screen bg-black overflow-hidden flex flex-col font-sans force-dark">
       
       {/* 1. Navbar */}
       <nav className="fixed top-0 inset-x-0 z-50 px-6 py-4 flex items-center justify-between border-b border-white/5 bg-black/40 backdrop-blur-xl">

@@ -7,6 +7,8 @@ export interface Message {
   text: string;
   isAi: boolean;
   isReport?: boolean;
+  reportMetrics?: any;
+  isSpoken?: boolean;
 }
 
 export interface ScreenerMetrics {
@@ -35,6 +37,8 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   const [isAiTalking, setIsAiTalking] = useState(false);
   const [dialogue, setDialogue] = useState<Message[]>([]);
+  const [inputMode, setInputMode] = useState<"spoken" | "typed">("typed");
+  const [fraudFlags, setFraudFlags] = useState<{type: string, time: number}[]>([]);
   const [metrics, setMetrics] = useState<ScreenerMetrics>({
     clarity: 0,
     engagement: 0,
@@ -52,6 +56,9 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recognitionRef = useRef<any>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+
+  const liveTranscriptRef = useRef(liveTranscript);
+  useEffect(() => { liveTranscriptRef.current = liveTranscript; }, [liveTranscript]);
 
   // ─── Video Analysis State ──────────────────────────────
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
@@ -120,8 +127,8 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
     }
   };
 
-  // Removed legacy SpeechRecognition effect and replaced with MediaRecorder + Live Preview
   const startRecording = async () => {
+    if (isListening || isThinking) return;
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         showToast("Recording not supported in this browser.", "error");
@@ -167,14 +174,15 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
 
       recorder.onstop = async () => {
         const finalBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
-        if (finalBlob.size < 1000) {
+        if (finalBlob.size < 4000) {
+          // Too small — likely silence or accidental click
           setLiveTranscript("");
           return;
         }
         await handleTranscription(finalBlob);
       };
 
-      recorder.start();
+      recorder.start(250); // Collect data every 250ms for reliability
       setIsListening(true);
     } catch (err) {
       console.error("Recording error:", err);
@@ -210,16 +218,38 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
       });
 
       const data = await response.json();
-      if (data.text && data.text.trim()) {
-        // Finalize: Replace live preview with cleaned Gemini result
+      
+      const llmText = data.text ? data.text.trim() : "";
+      
+      // Filter hallucinated/garbage transcriptions from Gemini
+      const isGarbage = 
+        !llmText ||
+        llmText.length < 2 ||
+        /^\[.*\]$/.test(llmText) || // [silence], [audio], [music] etc.
+        /^(okay|ok|um|uh|hmm|hello|hi|\.+|\?+|,+)$/i.test(llmText) ||
+        /^no\s*(audio|speech|sound|input)/i.test(llmText) ||
+        /^(the\s+)?(audio|video|recording)\s+(is|was|contains?)\s/i.test(llmText);
+      
+      const currentLive = liveTranscriptRef.current.trim();
+      let finalText = "";
+      
+      if (isGarbage || data.error) {
+         // Backend failed or hallucinated — fall back to browser preview
+         finalText = currentLive;
+      } else {
+         finalText = llmText;
+      }
+
+      if (finalText && finalText.length >= 2) {
         setLiveTranscript("");
+        setInputMode("spoken");
         setInputValue(prev => {
-          const trimmedText = data.text.trim();
-          if (!prev) return trimmedText;
-          return prev.endsWith(" ") ? prev + trimmedText : prev + " " + trimmedText;
+          if (!prev) return finalText;
+          return prev.endsWith(" ") ? prev + finalText : prev + " " + finalText;
         });
-      } else if (data.error) {
-        showToast("Transcription failed.", "error");
+      } else {
+         // Nothing usable — just clear state
+         setLiveTranscript("");
       }
     } catch (e) {
       showToast("Failed to reach transcription server.", "error");
@@ -251,6 +281,30 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
       endInterview();
     }
   }, [timer]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fraud & Attention tracking
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && interviewStarted && !interviewEnded) {
+        showToast("⚠️ Tab switch detected! Activity flagged.", "warning");
+        setFraudFlags(prev => [...prev, { type: "tab_switch", time: 600 - timer }]);
+      }
+    };
+
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement && interviewStarted && !interviewEnded) {
+        showToast("⚠️ Fullscreen exited! Activity flagged.", "warning");
+        setFraudFlags(prev => [...prev, { type: "fullscreen_exit", time: 600 - timer }]);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, [interviewStarted, interviewEnded, timer]);
 
   // Cleanup effects
   useEffect(() => {
@@ -338,6 +392,14 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
   };
 
   const startInterview = async () => {
+    try {
+      if (typeof document !== 'undefined' && document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch (e) {
+      console.warn("Fullscreen request failed:", e);
+    }
+
     setInterviewStarted(true);
     setIsThinking(true);
 
@@ -382,6 +444,12 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
   };
 
   const endInterview = async () => {
+    try {
+      if (typeof document !== 'undefined' && document.fullscreenElement) {
+        await document.exitFullscreen();
+      }
+    } catch (e) {}
+
     if (timerRef.current) clearInterval(timerRef.current);
     if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
     if (audioStream) {
@@ -406,9 +474,22 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
         body: JSON.stringify({ messages: currentDialogue, generateReport: true }),
       });
       const data = await response.json();
+      let reportText = data.text;
+      let parsedMetrics = null;
+      
+      const metricsMatch = reportText.match(/\[METRICS:\s*(\{.*?\})\]/);
+      if (metricsMatch) {
+        try {
+          parsedMetrics = JSON.parse(metricsMatch[1]);
+          reportText = reportText.replace(/\[METRICS:\s*(\{.*?\})\]/, "").trim();
+        } catch (e) {
+            console.error("Failed to parse metrics", e);
+        }
+      }
+
       setDialogue((prev) => [
         ...prev,
-        { speaker: "Evaluation Report", text: data.text, isAi: true, isReport: true },
+        { speaker: "Evaluation Report", text: reportText, isAi: true, isReport: true, reportMetrics: parsedMetrics },
       ]);
       const performanceScore = Math.max(50, Math.round((metrics.clarity + metrics.engagement + metrics.patience) / 3)) || 75;
       const durationSeconds = 600 - timer;
@@ -437,10 +518,11 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
       stopRecording();
     }
 
-    const newMsg: Message = { speaker: "Candidate", text, isAi: false };
+    const newMsg: Message = { speaker: "Candidate", text, isAi: false, isSpoken: inputMode === "spoken" };
     const newDialogue = [...dialogue, newMsg];
     setDialogue(newDialogue);
     setInputValue("");
+    setInputMode("typed"); // Reset to typed for next input unless speech sets it to spoken
     setIsThinking(true);
 
     setMetrics((prev) => ({
@@ -484,6 +566,12 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
   };
 
   const resetSession = () => {
+    try {
+      if (typeof document !== 'undefined' && document.fullscreenElement) {
+        document.exitFullscreen();
+      }
+    } catch (e) {}
+
     localStorage.removeItem("cuemath_screener_history");
     localStorage.removeItem("cuemath_screener_metrics");
     setDialogue([]);
@@ -500,7 +588,7 @@ export function useScreenerLogic(showToast: (msg: string, type: "success" | "err
     state: {
       isListening, isThinking, isAiTalking, interviewStarted, interviewEnded, 
       timer, inputValue, dialogue, metrics, audioStream, isTranscribing, 
-      liveTranscript, aiWhiteboardCommands, videoStream, isVideoEnabled, videoMetrics
+      liveTranscript, aiWhiteboardCommands, videoStream, isVideoEnabled, videoMetrics, fraudFlags
     },
     refs: {
       reportRef, dialogueEndRef, videoRef

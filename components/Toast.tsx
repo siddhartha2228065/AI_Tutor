@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, createContext, useContext } from "react";
+import { createPortal } from "react-dom";
 
 interface Toast {
   id: string;
@@ -20,6 +21,11 @@ export function useToast() {
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const showToast = useCallback((message: string, type: Toast["type"] = "info") => {
     const id = Math.random().toString(36).substring(2);
@@ -57,29 +63,32 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={{ showToast }}>
       {children}
       {/* Toast Container */}
-      <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-3 pointer-events-none">
-        {toasts.map((toast, i) => (
-          <div
-            key={toast.id}
-            className={`pointer-events-auto flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-gradient-to-r ${colorMap[toast.type]} text-white shadow-2xl min-w-[320px] max-w-[440px] animate-slide-in backdrop-blur-xl`}
-            style={{ animationDelay: `${i * 50}ms` }}
-          >
-            <span
-              className="material-symbols-outlined text-xl flex-shrink-0"
-              style={{ fontVariationSettings: "'FILL' 1" }}
+      {mounted && createPortal(
+        <div className="fixed top-6 right-6 z-[99999] flex flex-col gap-3 pointer-events-none">
+          {toasts.map((toast, i) => (
+            <div
+              key={toast.id}
+              className={`pointer-events-auto flex items-center gap-3 px-6 py-4 rounded-2xl bg-gradient-to-r ${colorMap[toast.type]} text-white shadow-2xl min-w-[340px] max-w-[480px] animate-fade-in-up backdrop-blur-2xl border border-white/20`}
+              style={{ animationDelay: `${i * 50}ms` }}
             >
-              {iconMap[toast.type]}
-            </span>
-            <p className="text-sm font-medium flex-1 leading-relaxed">{toast.message}</p>
-            <button
-              onClick={() => dismiss(toast.id)}
-              className="text-white/60 hover:text-white transition-colors flex-shrink-0"
-            >
-              <span className="material-symbols-outlined text-lg">close</span>
-            </button>
-          </div>
-        ))}
-      </div>
+              <span
+                className="material-symbols-outlined text-2xl flex-shrink-0"
+                style={{ fontVariationSettings: "'FILL' 1" }}
+              >
+                {iconMap[toast.type]}
+              </span>
+              <p className="text-sm font-semibold flex-1 leading-relaxed">{toast.message}</p>
+              <button
+                onClick={() => dismiss(toast.id)}
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors flex-shrink-0"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+          ))}
+        </div>,
+        document.body
+      )}
     </ToastContext.Provider>
   );
 }

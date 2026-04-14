@@ -56,13 +56,13 @@ export default function PreStartScreen({ startInterview }: Props) {
   };
 
   return (
-    <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-[#050510] relative overflow-hidden h-full min-h-[calc(100vh-80px)] transition-colors duration-500">
+    <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-[#050510] relative overflow-hidden h-full min-h-[calc(100svh-140px)] transition-colors duration-500">
       {/* AntiGravitySphere Background */}
       <div className="absolute inset-0 z-0 opacity-40 dark:opacity-60 pointer-events-none">
          <AntiGravitySphere isThinking={step === "calibrating"} />
       </div>
 
-      <div className="relative z-10 max-w-xl mx-auto p-12 text-center bg-white/60 dark:bg-slate-950/70 backdrop-blur-3xl border border-slate-200 dark:border-white/10 rounded-3xl shadow-2xl transition-colors duration-500">
+      <div className="relative z-10 w-full max-w-xl mx-auto p-6 md:p-12 text-center bg-white/60 dark:bg-slate-950/70 backdrop-blur-3xl border border-slate-200 dark:border-white/10 rounded-3xl shadow-2xl transition-colors duration-500 m-4">
         
         {step === "intro" && (
           <div className="animate-fade-in flex flex-col items-center">

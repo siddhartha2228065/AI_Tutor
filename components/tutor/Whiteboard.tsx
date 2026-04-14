@@ -84,7 +84,6 @@ export default function Whiteboard({ onClose, aiCommands = [] }: WhiteboardProps
 
   const stopDrawing = () => {
     contextRef.current?.closePath();
-    setIsDrawing(true); // Reset state
     setIsDrawing(false);
   };
 
@@ -166,7 +165,7 @@ export default function Whiteboard({ onClose, aiCommands = [] }: WhiteboardProps
   };
 
   return (
-    <div className="fixed inset-4 md:inset-10 z-[100] flex flex-col glass-card border-none overflow-hidden animate-slide-in shadow-[0_0_100px_rgba(0,0,0,0.5)]">
+    <div className="fixed inset-2 md:inset-10 z-[100] flex flex-col glass-card border-none overflow-hidden animate-slide-in shadow-[0_0_100px_rgba(0,0,0,0.5)]">
       {/* Header */}
       <div className="p-4 border-b border-white/5 bg-white/5 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -248,7 +247,7 @@ function ToolButton({ active, onClick, icon }: { active: boolean; onClick: () =>
   return (
     <button
       onClick={onClick}
-      className={`p-3 rounded-xl transition-all ${active ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 grow' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
+      className={`p-2.5 md:p-3 rounded-xl transition-all flex-shrink-0 ${active ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 grow' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
     >
       {icon}
     </button>

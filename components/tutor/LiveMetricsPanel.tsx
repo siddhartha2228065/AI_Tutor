@@ -9,6 +9,8 @@ interface Props {
   endInterview: () => void;
   videoMetrics?: VideoMetrics;
   isVideoEnabled?: boolean;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 export default function LiveMetricsPanel({
@@ -20,13 +22,36 @@ export default function LiveMetricsPanel({
   endInterview,
   videoMetrics,
   isVideoEnabled,
+  isOpen,
+  onClose,
 }: Props) {
   return (
-    <div className="w-80 border-l border-white/5 bg-slate-900/50 backdrop-blur-xl flex flex-col flex-shrink-0 hidden lg:flex shadow-2xl">
-      <div className="p-6 border-b border-white/5 bg-slate-900/30">
-        <h3 className="font-headline font-bold text-white text-sm uppercase tracking-widest">Telemetry</h3>
-        <p className="text-cyan-500/70 text-[10px] mt-1 font-mono">LIVE_AGENT_MONITORING</p>
-      </div>
+    <>
+      {/* Mobile Overlay Backdrop */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[55] lg:hidden animate-fade-in" 
+          onClick={onClose}
+        />
+      )}
+      
+      <div className={`
+        fixed inset-y-0 right-0 z-[60] w-80 bg-slate-900 shadow-2xl transition-transform duration-500 ease-in-out lg:translate-x-0 lg:static lg:z-0
+        ${isOpen ? "translate-x-0" : "translate-x-full"}
+        flex flex-col flex-shrink-0 border-l border-white/5 backdrop-blur-xl
+      `}>
+        <div className="p-6 border-b border-white/5 bg-slate-900/30 flex items-center justify-between">
+          <div>
+            <h3 className="font-headline font-bold text-white text-sm uppercase tracking-widest">Telemetry</h3>
+            <p className="text-cyan-500/70 text-[10px] mt-1 font-mono">LIVE_AGENT_MONITORING</p>
+          </div>
+          <button 
+            onClick={onClose}
+            className="lg:hidden w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-slate-400 hover:text-white"
+          >
+            <span className="material-symbols-outlined text-lg">close</span>
+          </button>
+        </div>
 
       <div className="p-6 flex flex-col gap-8 flex-1">
         {[
@@ -124,6 +149,7 @@ export default function LiveMetricsPanel({
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

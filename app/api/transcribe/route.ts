@@ -56,9 +56,23 @@ export async function POST(req: NextRequest) {
       throw new Error(data.error?.message || `OpenRouter returned ${response.status}`);
     }
 
-    const transcript = data.choices?.[0]?.message?.content || "";
+    const rawTranscript = data.choices?.[0]?.message?.content || "";
+    
+    // Server-side filter: Gemini sometimes hallucinates filler on silence
+    const trimmed = rawTranscript.trim();
+    const isHallucination = 
+      !trimmed ||
+      trimmed.length < 2 ||
+      /^\[.*\]$/.test(trimmed) ||
+      /^(okay|ok|um|uh|hmm|hello|hi|hey|\.+|\?+|,+)$/i.test(trimmed) ||
+      /^no\s*(audio|speech|sound|input|content)/i.test(trimmed) ||
+      /^(the\s+)?(audio|video|recording)\s+(is|was|contains?)\s/i.test(trimmed);
+    
+    if (isHallucination) {
+      return NextResponse.json({ text: "", filtered: true });
+    }
 
-    return NextResponse.json({ text: transcript });
+    return NextResponse.json({ text: trimmed });
   } catch (error: any) {
     console.error("Transcription API Error:", error);
     return NextResponse.json({ error: error.message || "Failed to transcribe audio" }, { status: 500 });
