@@ -311,7 +311,9 @@ export function useTelemetryStore() {
         score: randomInRange(800, 2000)
       })),
       candidates: [],
-      currentRoadmap: null
+      currentRoadmap: null,
+      completedTopics: [],
+      roadmapStartDate: null
     };
     localStorage.setItem('cuemath_telemetry', JSON.stringify(mockState));
     setData({ ...mockState, isHydrated: true });
