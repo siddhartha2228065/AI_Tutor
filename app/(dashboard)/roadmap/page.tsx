@@ -7,6 +7,7 @@ import Link from "next/link";
 export default function RoadmapPage() {
   const telemetry = useTelemetryStore();
   const roadmap = telemetry.currentRoadmap;
+  const completedTopics = telemetry.completedTopics || [];
 
   if (!telemetry.isHydrated) return <div className="p-8 text-white">Loading curriculum...</div>;
 
@@ -26,6 +27,37 @@ export default function RoadmapPage() {
       </div>
     );
   }
+
+  // Calculate Progress
+  const allTopics = roadmap.weeks.flatMap(w => w.topics);
+  const totalTopics = allTopics.length;
+  const completedCount = completedTopics.length;
+  const progressPct = totalTopics > 0 ? Math.round((completedCount / totalTopics) * 100) : 0;
+
+  // Calculate Days Elapsed
+  const startDate = telemetry.roadmapStartDate ? new Date(telemetry.roadmapStartDate) : new Date();
+  const diffTime = Math.abs(new Date().getTime() - startDate.getTime());
+  const daysElapsed = Math.min(28, Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1);
+
+  // Find active week index (first week with uncompleted topics)
+  const activeWeekIdx = roadmap.weeks.findIndex(w => 
+    w.topics.some(t => !completedTopics.includes(t.title))
+  );
+  const currentActiveWeekIdx = activeWeekIdx === -1 ? roadmap.weeks.length - 1 : activeWeekIdx;
+
+  const handleStartNextChapter = () => {
+    const nextTopic = allTopics.find(t => !completedTopics.includes(t.title));
+    if (nextTopic) {
+      // Find the element and scroll to it
+      const el = document.getElementById(`topic-${nextTopic.title.replace(/\s+/g, '-').toLowerCase()}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Visual feedback
+        el.classList.add('ring-4', 'ring-indigo-500/50');
+        setTimeout(() => el.classList.remove('ring-4', 'ring-indigo-500/50'), 2000);
+      }
+    }
+  };
 
   return (
     <div className="flex-1 p-6 md:p-8 xl:p-12 w-full max-w-[1400px] mx-auto min-h-screen flex flex-col gap-10 text-slate-200">
@@ -77,7 +109,7 @@ export default function RoadmapPage() {
              {/* Week Indicator */}
              <div className="mb-8 flex flex-col items-center">
                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center border-4 transition-all duration-500 ${
-                  idx === 0 ? 'bg-indigo-600 border-indigo-400 shadow-[0_0_30px_rgba(99,102,241,0.5)] scale-110' : 'bg-slate-900 border-white/5 group-hover:border-indigo-500/50'
+                  idx === currentActiveWeekIdx ? 'bg-indigo-600 border-indigo-400 shadow-[0_0_30px_rgba(99,102,241,0.5)] scale-110' : 'bg-slate-900 border-white/5 group-hover:border-indigo-500/50'
                 }`}>
                    <span className="text-xl font-black text-white">{week.week}</span>
                 </div>
@@ -88,23 +120,50 @@ export default function RoadmapPage() {
 
              {/* Content Card */}
              <div className={`glass-card rounded-[2rem] p-8 flex flex-col h-full border-t-4 transition-all duration-500 group-hover:-translate-y-2 ${
-               idx === 0 ? 'border-t-indigo-500 ring-1 ring-white/10 shadow-2xl' : 'border-t-transparent border-white/5'
+               idx === currentActiveWeekIdx ? 'border-t-indigo-500 ring-1 ring-white/10 shadow-2xl' : 'border-t-transparent border-white/5'
              }`}>
                 <div className="mb-6 flex items-start justify-between">
                    <p className="text-indigo-400 font-bold text-xs uppercase tracking-widest">{week.focus}</p>
-                   {idx === 0 && <span className="bg-indigo-500 text-white text-[8px] font-black px-2 py-1 rounded italic animate-pulse">ACTIVE_PHASE</span>}
+                   {idx === currentActiveWeekIdx && (
+                     <span className="bg-indigo-500 text-white text-[8px] font-black px-2 py-1 rounded italic animate-pulse">
+                       {progressPct === 100 ? 'COMPLETED' : 'ACTIVE_PHASE'}
+                     </span>
+                   )}
                 </div>
 
                 <div className="space-y-4 flex-1">
-                   {week.topics.map((topic, tIdx) => (
-                     <div key={tIdx} className="bg-white/5 p-4 rounded-2xl border border-white/5 hover:bg-white/10 transition-all cursor-pointer">
-                        <div className="flex items-center gap-3 mb-2">
-                           <span className="material-symbols-outlined text-indigo-400 text-lg">{topic.icon}</span>
-                           <p className="text-white font-bold text-sm">{topic.title}</p>
-                        </div>
-                        <p className="text-xs text-slate-500 leading-relaxed font-medium">{topic.desc}</p>
-                     </div>
-                   ))}
+                   {week.topics.map((topic, tIdx) => {
+                     const isDone = completedTopics.includes(topic.title);
+                     return (
+                      <div 
+                        key={tIdx} 
+                        id={`topic-${topic.title.replace(/\s+/g, '-').toLowerCase()}`}
+                        onClick={() => telemetry.toggleTopic(topic.title)}
+                        className={`p-4 rounded-2xl border transition-all cursor-pointer relative group/topic ${
+                          isDone 
+                            ? 'bg-emerald-500/10 border-emerald-500/30 opacity-60' 
+                            : 'bg-white/5 border-white/5 hover:bg-white/10'
+                        }`}
+                      >
+                         <div className="flex items-center gap-3 mb-2">
+                            <span className={`material-symbols-outlined text-lg ${isDone ? 'text-emerald-400' : 'text-indigo-400'}`}>
+                              {isDone ? 'check_circle' : topic.icon}
+                            </span>
+                            <p className={`font-bold text-sm ${isDone ? 'text-emerald-200 line-through decoration-emerald-500/50' : 'text-white'}`}>
+                              {topic.title}
+                            </p>
+                         </div>
+                         <p className="text-xs text-slate-500 leading-relaxed font-medium">{topic.desc}</p>
+                         
+                         {/* Checkmark overlay on hover if not done */}
+                         {!isDone && (
+                           <div className="absolute inset-0 flex items-center justify-center bg-indigo-600/20 opacity-0 group-hover/topic:opacity-100 rounded-2xl transition-opacity">
+                              <span className="text-[10px] font-black uppercase text-white bg-indigo-600 px-3 py-1 rounded-full shadow-lg">Mark Done</span>
+                           </div>
+                         )}
+                      </div>
+                     );
+                   })}
                 </div>
 
                 <div className="mt-8 pt-6 border-t border-white/5">
@@ -127,15 +186,23 @@ export default function RoadmapPage() {
              <div className="flex items-center gap-6 px-6">
                 <div className="flex items-center gap-2">
                    <Flame className="w-5 h-5 text-orange-500" />
-                   <p className="text-white font-black">Day 1 / 28</p>
+                   <p className="text-white font-black">Day {daysElapsed} / 28</p>
                 </div>
                 <div className="w-px h-8 bg-white/10" />
                 <div className="flex items-center gap-2 text-slate-400 font-bold text-sm">
-                   Total Progression: <span className="text-indigo-400 font-black font-mono">5%</span>
+                   Total Progression: <span className="text-indigo-400 font-black font-mono">{progressPct}%</span>
                 </div>
              </div>
-             <button className="px-8 py-3 bg-white text-indigo-900 rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl">
-                Start Next Chapter
+             <button 
+                onClick={handleStartNextChapter}
+                disabled={progressPct === 100}
+                className={`px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-xl active:scale-95 ${
+                  progressPct === 100 
+                    ? 'bg-emerald-600 text-white cursor-not-allowed' 
+                    : 'bg-white text-indigo-900 hover:scale-105'
+                }`}
+             >
+                {progressPct === 100 ? 'Course Completed' : 'Start Next Chapter'}
              </button>
           </div>
       </div>

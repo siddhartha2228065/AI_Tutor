@@ -62,11 +62,14 @@ export async function POST(req: NextRequest) {
     const trimmed = rawTranscript.trim();
     const isHallucination = 
       !trimmed ||
-      trimmed.length < 2 ||
-      /^\[.*\]$/.test(trimmed) ||
-      /^(okay|ok|um|uh|hmm|hello|hi|hey|\.+|\?+|,+)$/i.test(trimmed) ||
+      // Ignore long bracketed text which are usually audio descriptions like [Background noise]
+      (/^\[.*\]$/.test(trimmed) && trimmed.length > 5) || 
+      // Specific Gemini hallucinations on silence
+      /^(this recording is|i am sorry|thank you for listening|the audio is|there is no speech|unintelligible)/i.test(trimmed) ||
       /^no\s*(audio|speech|sound|input|content)/i.test(trimmed) ||
-      /^(the\s+)?(audio|video|recording)\s+(is|was|contains?)\s/i.test(trimmed);
+      /^(the\s+)?(audio|video|recording)\s+(is|was|contains?)\s/i.test(trimmed) ||
+      // Only filter single characters if they aren't common (allow "A", "I")
+      (trimmed.length === 1 && !/^[ai0-9]$/i.test(trimmed));
     
     if (isHallucination) {
       return NextResponse.json({ text: "", filtered: true });

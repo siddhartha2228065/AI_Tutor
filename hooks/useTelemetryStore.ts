@@ -71,6 +71,8 @@ export interface TelemetryData {
   socialChallenges: SocialChallenge[];
   candidates: Candidate[];
   currentRoadmap: Roadmap | null;
+  completedTopics: string[]; // List of topic titles completed
+  roadmapStartDate: string | null; // ISO string of when it was generated
   isHydrated: boolean; 
 }
 
@@ -116,6 +118,8 @@ const DEFAULT_DATA: Omit<TelemetryData, 'isHydrated'> = {
   ],
   candidates: [],
   currentRoadmap: null,
+  completedTopics: [],
+  roadmapStartDate: null,
 };
 
 export function useTelemetryStore() {
@@ -209,7 +213,26 @@ export function useTelemetryStore() {
 
   const setRoadmap = (roadmap: Roadmap) => {
     setData((prev) => {
-      const newData = { ...prev, currentRoadmap: roadmap };
+      const newData = { 
+        ...prev, 
+        currentRoadmap: roadmap,
+        roadmapStartDate: new Date().toISOString(),
+        completedTopics: [] // Reset progress for new roadmap
+      };
+      const { isHydrated, ...toSave } = newData;
+      localStorage.setItem('cuemath_telemetry', JSON.stringify(toSave));
+      return newData;
+    });
+  };
+
+  const toggleTopic = (topicTitle: string) => {
+    setData((prev) => {
+      const isCompleted = prev.completedTopics.includes(topicTitle);
+      const newCompleted = isCompleted
+        ? prev.completedTopics.filter(t => t !== topicTitle)
+        : [...prev.completedTopics, topicTitle];
+      
+      const newData = { ...prev, completedTopics: newCompleted };
       const { isHydrated, ...toSave } = newData;
       localStorage.setItem('cuemath_telemetry', JSON.stringify(toSave));
       return newData;
@@ -300,6 +323,7 @@ export function useTelemetryStore() {
     seedMockData,
     saveCandidate,
     generateRoadmap,
-    setRoadmap
+    setRoadmap,
+    toggleTopic
   };
 }
