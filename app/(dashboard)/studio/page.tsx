@@ -388,17 +388,25 @@ export default function StudioPage() {
 
             <div className="mt-auto">
               <button 
-                onClick={() => {
+                onClick={async () => {
                   if (!imagePrompt.trim()) return;
                   setIsGeneratingImage(true);
                   setImageHasLoaded(false);
                   setImageError(false);
-                  // Artificial slight delay for UI feedback before changing src
-                  setTimeout(() => {
+                  setGeneratedImageUrl(null);
+                  try {
                     const encoded = encodeURIComponent(imagePrompt);
-                    setGeneratedImageUrl(`/api/image?prompt=${encoded}&cachebuster=${Math.random()}`);
+                    const res = await fetch(`/api/image?prompt=${encoded}&cachebuster=${Math.random()}`);
+                    if (!res.ok) throw new Error("API returned " + res.status);
+                    const blob = await res.blob();
+                    const blobUrl = URL.createObjectURL(blob);
+                    setGeneratedImageUrl(blobUrl);
+                  } catch (e: any) {
+                    setImageError(true);
+                    showToast("Image generation failed: " + (e.message || "Unknown error"), "error");
+                  } finally {
                     setIsGeneratingImage(false);
-                  }, 1500);
+                  }
                 }}
                 disabled={isGeneratingImage}
                 className="w-full py-4 bg-gradient-to-r from-teal-500 to-indigo-600 hover:opacity-90 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-teal-500/30 transition-all active:scale-95 disabled:opacity-50"
